@@ -1,0 +1,131 @@
+---
+title: "Analysis of Motor Trend Car Road Test Data with Regressional Models (A Coursera course project)"
+author: "Ye Li"
+date: "September 27, 2015"
+output: pdf_document
+---
+
+##Executive Summary
+This project aims at practicing the regressional model selection and results interpretation through analyzing the dataset "mtcars" in the R data package. Through the analysis, two questions need to be answered:
+
+* Is an automatic or manual transmission better for MPG ?
+* Quantify the MPG difference between automatic and manual transmissions
+
+To answer the two questions, we first used some exploratory analysis to determine which variables are most relevant to changes in the fule efficiency (mpg). Then, several multivariate regressions were performed to select the model which provides sufficient fitting and optimized variance. The necessity of adding transmission type (am) as a regressor was evaluated and discussed. Last, the selected model is used to explain the changes in MPG quantitatively. 
+
+##Data Exploratory 
+```{r dataexploratory1, echo=FALSE,eval=TRUE, results='hide'}
+# load data and preview
+data(mtcars)
+# str(mtcars) not to print due to file length
+```
+The "mtcars" data contains `r nrow(mtcars)` observations and `r ncol(mtcars)` variables about fuel consumption and 10 aspects of automobile design from the 1974 Motor Trend US magazine. The variables observed are `r colnames(mtcars)`. Accroding to the "str" results (not shown), all variables are numbers. Among them, the vs (V or Straight Engine), am(automatic or manual transmission) should be considered factors; and the cyl(number of cyclinders), gear, and carb (number of carburetors) should be considered integers not continuous numbers. More details about the variables can be found in the article by R.R. Hocking published in Biometrics, 32(1), 1976, 1-49, [Link](http://www.jstor.org/stable/2529336). 
+
+The summary of correlations between pairs of variables is listed in the Appendix A. The variables have correlations with mpg stronger than 0.8 ("+") are cyl, disp, and wt. It's also worth noting that the correlation between cyl & disp, cyl & hp, cyl & vs, and wt and disp are also stronger than 0.8. Therefore, when performing regrssional analysis to mpg v.s. other variables, the wt, cyl, and disp should be considered as priototies and the dependency among the three variables should be considered too. The correlation between mpg & am is 0.5998, which is not sufficient to determin if am should be a good regressor for mpg. Further tests need to be performed. 
+```{r dataexploratory2, echo=FALSE,eval=TRUE, results='hide'}
+cor_all <- cor(mtcars)
+symnum(cor_all)
+```
+
+To explore the relationship among the most interested variables, a box plot and a scatter plot are shown in figures in the Appendix A. As shown in Fig 1-1, the differences in fuel efficiency related to manual or automatic transmission appear to be rather significant for cars with 4 or 6 cylinders but not clear for 8 cylinder cars. In Fig 1-2 (figure g2 not shown), the fuel efficiency appears to be increasing when the car weight and displacement increase. The two figures further demonstrated potential dependencies of the fuel efficiency (mpg) to the three variables, wt, disp, and cyl. The effect of the transmission type remains unclear. 
+
+```{r dataexploratory3, echo=FALSE,eval=TRUE, results='hide', fig.show='hide'}
+library(ggplot2)
+g1 <- ggplot(data=mtcars, aes(x=factor(am),y=mpg))
+g1 <- g1 + geom_boxplot(aes(fill=factor(cyl))) 
+g1 <- g1 + labs(title ="Figure 1-1 Boxplot of fuel efficiency vs. transmission \n type and number of cylinders", x = "Transmission Type", y= "Fuel Efficiency (mpg)")
+g1 <- g1 + scale_x_discrete(label= c("Automatic", "Manual"))
+g1 <- g1 + scale_fill_discrete(name = "Cylinder", labels = c ("4", "6", "8") )
+
+g2 <- ggplot(data=mtcars, aes(x=wt,y=mpg)) 
+g2 <- g2 + geom_point(aes(color=disp))
+g2 <- g2 + labs(title ="Figure 1-2 Effect of car weight and displacement \n on fuel efficiency", x = "Car Weight (lb/1000)", y= "Fuel Efficiency (mpg)")
+g2 <- g2 + scale_color_continuous(name = "Displacement (cu. in.)" )
+
+g1
+```
+##Regressional Model Selection
+###Possible Regressional Models
+Based on the exploratary analysis above, a step-by-step multivariate regression is performed to the fuel efficiency (mpg) v.s. wt, disp, and cyl. And the variable transmission type(am) is also considered since the exploratory analysis didn't give a clear message about its relevancy.   
+
+```{r regression, echo=FALSE,eval=TRUE, results='hide', fig.show='hide'}
+#classify some variables to factors and integers as analyzed in the exploratory section
+library(reshape2)
+suppressMessages(library(dplyr))
+mtcars1 <- mutate(mtcars, am = as.factor(am), vs = as.factor(vs), cyl = as.integer(cyl),
+                  gear = as.integer(gear), carb = as.integer(carb))
+
+# fit multiple models to compare
+fit_wt <- lm(mpg ~ wt, data = mtcars)
+fit_disp <- lm(mpg ~ disp, data = mtcars)
+fit_cyl <- lm(mpg ~ factor(cyl), data = mtcars)
+fit_am <- lm(mpg ~ factor(am), data = mtcars)
+fit_wt_disp <- lm(mpg ~ wt + disp, data = mtcars)
+fit_wt_disp_int <- lm(mpg ~ wt + disp + wt * disp, data = mtcars)
+fit_wt_disp_int_am <- lm(mpg ~wt + disp + wt*disp + factor(am), mtcars)
+fit_wt_disp_int_cyl <- lm(mpg ~ wt + disp + wt* disp + factor(cyl), data = mtcars)
+fit_wt_disp_int_cyl_am <- lm(mpg ~ wt + disp + wt* disp + factor(cyl) + factor(am), data = mtcars)
+fit_all <- lm(mpg ~., data = mtcars1)
+
+#analyze the variance of several models to select one
+anova4 <- anova(fit_wt, fit_wt_disp, fit_wt_disp_int, fit_wt_disp_int_am)
+anova5 <- anova(fit_wt, fit_wt_disp, fit_wt_disp_int, fit_wt_disp_int_cyl, fit_wt_disp_int_cyl_am)
+
+print(anova5)
+
+# confirm decision with variance inflation factor analysis
+library(car)
+vifall <- vif(fit_all)
+
+```
+
+After fitting multiple nested models with the above variables, the variance analysis of the models is shown in anova5 table in Appendix B. Based on this ANOVA table, the model 3, mpg ~ wt + disp + wt*disp is optimized in minimizing the variation. Adding factor cyl and adding factor am as regressors are both rejected due to high Pr(>F) value. (We also ran the ANOVA table for adding am without cyl (anova4 in Appendix B, not printed). The result also reject the addition of am as a regressor.)
+
+###Resigudal Plot and Diagnosis
+
+```{r residual, echo=FALSE,eval=TRUE, results='hide', fig.show='hide'}
+par(mfrow = c(2,2))
+plot(fit_wt_disp_int)
+
+#residual diagnostics
+dfbetas_selected <- round(dfbetas(fit_wt_disp_int)[, 2], 3)
+dfhatvalues <- round(hatvalues(fit_wt_disp_int)[1:32], 3)
+
+```
+The residual plot of the selected model is plotted as a figure in Appendix C. The residuals vs Fitted and the scale-location plot do not show any clear patterns. The Normal Q-Q plot shows that the data points of Fiat 128, Pontiac Firebird and Toyota Corolla deviates from the normal distribution a bit. And the Chrysler Imperial, Pontiac Firbird and Toyota Corolla may cause comparatively high coefficient change when deleting them from the modeling. The conclusion can also be confirmed by the dfbetas and dfhatvalues calcualted in Appendix C. 
+
+###Interpretation of the Selected Model 
+
+As shown in the summary of the selected model printed in Appendix D, our model estimates an expected `r round(coef(summary(fit_wt_disp_int))[2,1], 3)`  decrease in fuel efficiency (mpg) for every 1000 lb increase in car weight when the displacement is held at 0. It also estimates that an expected `r round(coef(summary(fit_wt_disp_int))[3,1], 3)` decrease in fuel efficiency (mpg) for every 1 cu. in. increase in displacement when the car has no weight. The increased mpg per 1000 lb car weight by each cu. in. displacement is `r round(coef(summary(fit_wt_disp_int))[4,1], 3)`. These interpretation may not carry any physical meaning considering the car machnics. 
+
+The intercept of the model `r round(coef(summary(fit_wt_disp_int))[1,1], 3)` also does not carry any phsyical meaning since it's not possible to have a car with 0 lb weight. 
+
+The compariosn betweent the regressional model with mpg ~ wt + disp + wt \* disp and mpg ~ wt + disp + wt \* disp  + am demonstrates that adding the transmission type (manual or automatic) as a factor regressor to the model does not improve the model significantly ( r.square does not change much). And the t value and the Pr(>|t|) show that the mpgs of manual transmission cars are NOT significantly higher than the mpgs of automatic transmission ones. 
+
+##Conclusion
+Based on this limited dataset (32 observations in total), the multivariate regression model explaining the fuel efficiency (mpg) the best is the model mpg ~ wt + disp + wt \* disp. The transmission type (am) is not a significant regressor and should not be included in the model.  There is NO enough evidence in this data set to demonstrate if the manual and automatic transmission gives better fuel efficiency (mpg). Even if we add the mpg factor in the selected regression model, it shows that the difference attribute to the transmission type (am) is NOT significant. With the selected model, the fuel efficiency is best explained quantitatively by the model shown in Appendix D.  
+
+
+##Appendix: R codes and Figures 
+A. R code and figure for data exploratory
+```{r dataexploratory1, echo=TRUE,eval=TRUE}
+```
+
+```{r dataexploratory2, echo=TRUE,eval=TRUE}
+```
+
+```{r dataexploratory3, echo=TRUE,eval=TRUE, fig.height=3.5, fig.width=5.5}
+```
+
+B. R code and figure for regression models
+```{r regression, echo=TRUE,eval=TRUE}
+```
+
+C. R code and figure for residual analysis 
+```{r residual, echo=TRUE,eval=TRUE}
+```
+
+D. R code and summary of the selected model 
+```{r selectedmodel, echo = FALSE, eval=TRUE}
+print(summary(fit_wt_disp_int))
+```
